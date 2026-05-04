@@ -1,4 +1,19 @@
 import argparse as ap
+import os
+
+
+def _effective_cpu_count() -> int:
+    """Cgroup-aware CPU count on Linux; falls back to os.cpu_count() elsewhere.
+
+    cell-eval's `MetricsEvaluator(num_threads=-1)` resolves through
+    `mp.cpu_count()`, which ignores SLURM/Docker cgroup CPU limits and
+    returns the host count. `numba.set_num_threads(N)` then raises when N
+    exceeds the cgroup-allocated CPUs. `os.sched_getaffinity(0)` returns
+    the cgroup-allowed set on Linux, which is what we want.
+    """
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return os.cpu_count() or 1
 
 
 def add_arguments_predict(parser: ap.ArgumentParser):
@@ -578,6 +593,7 @@ def run_tx_predict(args: ap.ArgumentParser):
                     outdir=results_dir,
                     prefix=ct,
                     pdex_kwargs=pdex_kwargs,
+                    num_threads=_effective_cpu_count(),
                 )
                 evaluator.compute(
                     profile=args.profile,
@@ -811,6 +827,7 @@ def run_tx_predict(args: ap.ArgumentParser):
                 outdir=results_dir,
                 prefix=ct,
                 pdex_kwargs=pdex_kwargs,
+                num_threads=_effective_cpu_count(),
             )
 
             evaluator.compute(
